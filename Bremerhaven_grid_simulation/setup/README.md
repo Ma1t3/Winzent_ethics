@@ -9,4 +9,4 @@
 5. Create an account and follow the how-to on the website.
 6. Using the example Experiment Run Documents (ERDs) in the folder 'Example ERDs', you can create your own experiment by copying the contents of the ERDs into
    the Experiment Run Document field when creating a new experiment.
-7. Have fun experimenting. 
+7. When wanting to further evalute an experiment, use the **winzent_log_analysis** found in the scenario folder.
