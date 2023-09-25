@@ -1,7 +1,7 @@
+import ast
 import csv
 import os
 import sys
-from os.path import exists
 
 """
 Script to analyze the log file of winzent experiments 
@@ -13,7 +13,7 @@ The string readouts are set for the log file version that is implemented in the
 Usage:
 python winzent_log_analysis.py <<log file path>> <<Boolean to write results into .csv-files>>
 
-If none of the parameters are specified, the scenarios will analyze all .log-files in the current 
+If none of the parameters are specified, the script will analyze all .log-files in the current 
 working directory and write them into a .csv-file.
 """
 
@@ -29,7 +29,7 @@ def calc_runtime(file_name):
         "avg": 0.0
     }
     step_counter = 0
-    with open(file_name) as temp_f:
+    with open(file_name, encoding="utf8") as temp_f:
         datafile = temp_f.readlines()
     for line in datafile:
         if 'Runtime: ' in line:
@@ -40,7 +40,10 @@ def calc_runtime(file_name):
                 runtime["max"] = curr_runtime
             step_counter += 1
             runtime["avg"] += curr_runtime
-    runtime["avg"] = runtime["avg"] / step_counter
+    if step_counter > 0:
+        runtime["avg"] = runtime["avg"] / step_counter
+    else:
+        runtime["avg"] = 0
     return runtime
 
 
@@ -66,7 +69,10 @@ def calc_messages(file_name):
                 messages["max"] = curr_messages
             step_counter += 1
             messages["avg"] += curr_messages
-    messages["avg"] = messages["avg"] / step_counter
+    if step_counter > 0:
+        messages["avg"] = messages["avg"] / step_counter
+    else:
+        messages["avg"] = 0
     return messages
 
 
@@ -83,7 +89,7 @@ def calc_negotiation_percent(file_name):
     }
     step_counter = 0
     needed_loads = -1
-    with open(file_name) as temp_f:
+    with open(file_name, encoding="utf8") as temp_f:
         datafile = temp_f.readlines()
     for line in datafile:
         if 'Needed Loads: ' in line:
@@ -99,14 +105,120 @@ def calc_negotiation_percent(file_name):
             if neg_pct["max"] < curr_neg_pct or neg_pct["min"] == 0.0:
                 neg_pct["max"] = curr_neg_pct
             needed_loads = -1
-    neg_pct['avg'] = neg_pct['avg'] / step_counter
+    if step_counter > 0:
+        neg_pct['avg'] = neg_pct['avg'] / step_counter
+    else:
+        neg_pct['avg'] = 0
     return neg_pct
 
 
-def put_results_into_csv(messages, runtime, negotiation_results, filename, log_name):
-    fieldnames = ["log_name", "max. runtime", "min_runtime", "avg_runtime",
-                  "max_messages", "min_messages", "avg_messages",
-                  "max. neg", "min. neg", "avg. neg"]
+def calc_ethics_score(file_name):
+    """
+    Returns a dict that contains the average negotiation result
+    ((amount of negotiated power / power needed by loads)) over all steps taken as well as
+    the max. and the min. negotiation result.
+    """
+    full_ethics_scores = {}
+    step_counter = 0
+    with open(file_name, encoding="utf8") as temp_f:
+        datafile = temp_f.readlines()
+    for line in datafile:
+        if 'ethics_scores' in line:
+            step_counter += 1
+            ethics_scores = ast.literal_eval(line.split('-->')[1])
+            if not full_ethics_scores:
+                full_ethics_scores = ethics_scores
+            else:
+                for key in full_ethics_scores:
+                    full_ethics_scores[key] = [a + b for a, b in zip(full_ethics_scores[key], ethics_scores[key])]
+            continue
+    final_ethics_scores = {}
+    for key in full_ethics_scores:
+        if float(full_ethics_scores[key][2]) == 0.0:
+            final_ethics_scores[key] = [(full_ethics_scores[key][0] / 1),
+                                        full_ethics_scores[key][1]]
+        else:
+            final_ethics_scores[key] = [(full_ethics_scores[key][0] / float(full_ethics_scores[key][2])), full_ethics_scores[key][1]]
+    return final_ethics_scores
+
+
+def check_for_warnings(file_name):
+    warning_counter = 0
+    with open(file_name, encoding="utf8") as temp_f:
+        datafile = temp_f.readlines()
+    for line in datafile:
+        if 'Invalid' in line:
+            warning_counter += 1
+    return warning_counter
+
+
+def check_energy(file_name):
+    step_counter = 0
+    produced_counter = {}
+    energy_absolute = {}
+    energy_scaling = {}
+    energy_percent = {}
+    energy_scaling_percent = {}
+    with open(file_name, encoding="utf8") as temp_f:
+        datafile = temp_f.readlines()
+    total_power_produced_this_step = 0
+    for line in datafile:
+        if 'PRODUCED' in line:
+            if line.split(' ')[2] in energy_absolute:
+                total_power_produced_this_step += int(line.split(' ')[1])
+                energy_absolute[line.split(' ')[2]] += int(line.split(' ')[1])
+                energy_scaling[line.split(' ')[2]] += float(line.split(' ')[3])
+                produced_counter[line.split(' ')[2]] += 1
+            else:
+                total_power_produced_this_step += int(line.split(' ')[1])
+                energy_absolute[line.split(' ')[2]] = int(line.split(' ')[1])
+                energy_scaling[line.split(' ')[2]] = float(line.split(' ')[3])
+                produced_counter[line.split(' ')[2]] = 1
+        if 'Needed Loads:' in line:
+            total_value = float(line.split(' ')[2])
+            energy_absolute['ext_grid'] = total_value - total_power_produced_this_step
+            energy_scaling['ext_grid'] = 1
+            produced_counter['ext_grid'] = 1
+            total_power_produced_this_step = 0
+            if total_value > 0:
+                for energy_type in energy_absolute:
+                    if energy_type in energy_percent:
+                        energy_percent[energy_type] += energy_absolute[energy_type] / total_value
+                        if produced_counter[energy_type] > 0:
+                            energy_scaling_percent[energy_type] += energy_scaling[energy_type] / produced_counter[energy_type]
+                    else:
+                        energy_percent[energy_type] = energy_absolute[energy_type] / total_value
+                        energy_scaling_percent[energy_type] = energy_scaling[energy_type] / produced_counter[energy_type]
+                    produced_counter[energy_type] = 0
+                    energy_absolute[energy_type] = 0
+                    energy_scaling[energy_type] = 0
+            step_counter += 1
+    for key in energy_percent:
+        energy_percent[key] = energy_percent[key] / step_counter
+        energy_scaling_percent[key] = energy_scaling_percent[key] / step_counter
+    return energy_percent, energy_scaling_percent
+
+
+def put_results_into_csv(messages, runtime, negotiation_results, ethics_scores, warnings,
+                         energy_percent,
+                         energy_scaling_percent,
+                         filename,
+                         log_name):
+    if 'Wind' not in energy_percent:
+        energy_percent["Wind"] = 0
+        energy_scaling_percent["Wind"] = 0
+    if 'Abfall' not in energy_percent:
+        energy_percent['Abfall'] = 0
+        energy_scaling_percent['Abfall'] = 0
+    if 'Gas' not in energy_percent:
+        energy_percent['Gas'] = 0
+        energy_scaling_percent['Gas'] = 0
+    if 'PV' not in energy_percent:
+        energy_percent['PV'] = 0
+        energy_scaling_percent['PV'] = 0
+    if 'ext_grid' not in energy_percent:
+        energy_percent['ext_grid'] = 0
+        energy_scaling_percent['ext_grid'] = 0
     data_list = {"log_name": log_name,
                  "max. runtime": runtime['max'],
                  "min_runtime": runtime['min'],
@@ -116,13 +228,27 @@ def put_results_into_csv(messages, runtime, negotiation_results, filename, log_n
                  "avg_messages": messages['avg'],
                  "max. neg": negotiation_results['max'],
                  "min. neg": negotiation_results['min'],
-                 "avg. neg": negotiation_results['avg']}
-    if not exists(filename + ".csv"):
-        with open(filename + ".csv", 'a', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+                 "avg. neg": negotiation_results['avg'],
+                 "warnings": warnings,
+                 "Wind": energy_percent["Wind"],
+                 "Abfall": energy_percent["Abfall"],
+                 "Gas": energy_percent["Gas"],
+                 "PV": energy_percent["PV"],
+                 "ext_grid": energy_percent["ext_grid"],
+                 "used_Wind_potential": energy_scaling_percent["Wind"],
+                 "used_Abfall_potential": energy_scaling_percent["Abfall"],
+                 "used_Gas_potential": energy_scaling_percent["Gas"],
+                 "used_PV_potential": energy_scaling_percent["PV"],
+                 }
+    for key in ethics_scores:
+        data_list[str(key)] = ethics_scores[key][0]
+        data_list[str(key)+"_outages"] = ethics_scores[key][1]
+    fieldnames = data_list.keys()
+    file_exists = os.path.isfile(filename + ".csv")
     with open(filename + ".csv", 'a', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=";")
+        if not file_exists:
+            writer.writeheader()
         writer.writerow(data_list)
 
 
@@ -133,7 +259,7 @@ def main():
         log_name = 'all'
         print("All .log-files in this folder will be analyzed.")
     try:
-        write_to_csv = bool(sys.argv[2])
+        write_to_csv = sys.argv[2]
     except:
         write_to_csv = True
         print("Results will be written to .csv.")
@@ -146,9 +272,16 @@ def main():
             messages = calc_messages(filename)
             runtime = calc_runtime(filename)
             negotiation_results = calc_negotiation_percent(filename)
-            if write_to_csv:
-                put_results_into_csv(messages, runtime, negotiation_results, "winzent_log_results", filename)
+            ethics_scores = calc_ethics_score(filename)
+            warnings = check_for_warnings(filename)
+            energy_percent, energy_scaling_percent = check_energy(filename)
+            if write_to_csv == True:
+                put_results_into_csv(messages, runtime, negotiation_results, ethics_scores,
+                                     warnings, energy_percent,
+                                     energy_scaling_percent,
+                                     "winzent_log_results", filename)
             else:
+                print(f"Results for {str(filename)}:")
                 print(f"max. runtime: {runtime['max']}\n"
                       f"min. runtime: {runtime['min']}\n"
                       f"avg. runtime {runtime['avg']}")
@@ -158,6 +291,13 @@ def main():
                 print(f"max. neg: {negotiation_results['max']}\n"
                       f"min. neg: {negotiation_results['min']}\n"
                       f"avg. neg: {negotiation_results['avg']}")
+                for score in ethics_scores.keys():
+                    print(f"ethics score for {score}: {ethics_scores[score]}\n")
+                print(f"amount of warnings: {warnings}")
+                for key in energy_percent:
+                    print(f"Energy mix had {energy_percent[key] * 100} % of "
+                          f"{key} energy in it. This was {energy_scaling_percent[key] * 100} % of the "
+                          f"possible max.")
             if log_name != 'all':
                 break
             else:
