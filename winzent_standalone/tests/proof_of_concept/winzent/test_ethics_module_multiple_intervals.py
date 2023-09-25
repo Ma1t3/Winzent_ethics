@@ -182,4 +182,4 @@ async def get_correct_solution_through_restarts():
     assert agent_f.flex[second_interval] == [0, 0]
 
 
-asyncio.run(get_correct_solution_through_restarts())
+asyncio.run(max_coverage_vs_best_ethics())

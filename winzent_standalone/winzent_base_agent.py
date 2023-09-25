@@ -5,6 +5,7 @@ import uuid
 from abc import ABC
 from datetime import datetime
 
+import numpy as np
 from mango.core.agent import Agent
 
 from winzent_standalone import xboole
@@ -400,15 +401,12 @@ class WinzentBaseAgent(Agent, ABC):
             return
         # If the agent has flexibility for the requested time, it replies
         # to the requesting agent
-        try:
-            value = self.get_flexibility_for_interval(
-                message.time_span,
-                msg_type=message.msg_type
-            )
-        except Exception as e:
-            print(f" ERROR! {e}")
-            value = 0
-        if value != 0:
+        value_array = self.get_flexibility_for_interval(
+            message.time_span,
+            msg_type=message.msg_type
+        )
+
+        if not all(element == 0 for element in value_array):
             msg_type = xboole.MessageType.Null
             # send message reply
             if message.msg_type == xboole.MessageType.OfferNotification:
@@ -416,7 +414,14 @@ class WinzentBaseAgent(Agent, ABC):
             elif message.msg_type == xboole.MessageType. \
                     DemandNotification:
                 msg_type = xboole.MessageType.OfferNotification
-            await self.answer_external_request(message, message_path, value, msg_type)
+            await self.answer_external_request(message, message_path, value_array, msg_type)
+            # if there are still values remaining, forward them to other agents
+            remaining_values = np.array(list(message.value)) - np.array(value_array)
+            if not all(element == 0 for element in remaining_values):
+                del message.value[:]
+                for value in remaining_values:
+                    message.value.append(value)
+                await self.send_message(message, msg_path=message_path, forwarding=True)
         else:
             await self.send_message(message, msg_path=message_path, forwarding=True)
 
@@ -540,11 +545,13 @@ class WinzentBaseAgent(Agent, ABC):
         else:
             logger.info(f"{self.aid}: Acceptance from {reply.sender} invalid.")
         logger.debug(f"{self.aid}: Sending withdrawal to {reply.sender}")
-        withdrawal = WinzentMessage(time_span=self._own_request.time_span,
+        print(type(list(reply.time_span)))
+        print(reply.value)
+        withdrawal = WinzentMessage(time_span=list(reply.time_span),
                                     is_answer=True, answer_to=reply.id,
                                     msg_type=xboole.MessageType.WithdrawalNotification,
                                     ttl=self._current_ttl, receiver=reply.sender,
-                                    value=reply.value[0],
+                                    value=reply.value,
                                     id=str(uuid.uuid4()),
                                     sender=self._aid
                                     )

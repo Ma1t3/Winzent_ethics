@@ -85,21 +85,34 @@ async def create_six_ethical_agents(
     # multiple container are possible, here just one is taken
     container = await Container.factory(addr=addr)
     tts = 3
+    use_ethics_score_as_negotiator = True
+    use_ethics_score_as_contributor = True
     # create agents
     agent_a = WinzentEthicalAgent(container=container, ttl=6, time_to_sleep=tts,
+                                  use_ethics_score_as_negotiator=use_ethics_score_as_negotiator,
+                                  use_ethics_score_as_contributor=use_ethics_score_as_contributor,
                                   ethics_score=agent_a_ethics_score,
                                   min_coverage=0.9,
-                                  coverage_weight=0.4,
-                                  ethics_score_weight=0.6)
+                                  coverage_weight=0.4)
     agent_b = WinzentEthicalAgent(container=container, ttl=6, time_to_sleep=tts,
+                                  use_ethics_score_as_negotiator=use_ethics_score_as_negotiator,
+                                  use_ethics_score_as_contributor=use_ethics_score_as_contributor,
                                   ethics_score=agent_b_ethics_score)
     agent_c = WinzentEthicalAgent(container=container, ttl=6, time_to_sleep=tts,
+                                  use_ethics_score_as_negotiator=use_ethics_score_as_negotiator,
+                                  use_ethics_score_as_contributor=use_ethics_score_as_contributor,
                                   ethics_score=agent_c_ethics_score)
     agent_d = WinzentEthicalAgent(container=container, ttl=6, time_to_sleep=tts,
+                                  use_ethics_score_as_negotiator=use_ethics_score_as_negotiator,
+                                  use_ethics_score_as_contributor=use_ethics_score_as_contributor,
                                   ethics_score=agent_d_ethics_score)
     agent_e = WinzentEthicalAgent(container=container, ttl=6, time_to_sleep=tts,
+                                  use_ethics_score_as_negotiator=use_ethics_score_as_negotiator,
+                                  use_ethics_score_as_contributor=use_ethics_score_as_contributor,
                                   ethics_score=agent_e_ethics_score)
     agent_f = WinzentEthicalAgent(container=container, ttl=6, time_to_sleep=tts,
+                                  use_ethics_score_as_negotiator=use_ethics_score_as_negotiator,
+                                  use_ethics_score_as_contributor=use_ethics_score_as_contributor,
                                   ethics_score=agent_f_ethics_score)
 
     if setup == "default":
@@ -150,43 +163,3 @@ async def create_max_coverage_vs_best_ethics_neighboring(agent_a, agent_b, agent
 
     agent_f.add_neighbor(aid=agent_c.aid, addr=addr)
     agent_f.add_neighbor(aid=agent_e.aid, addr=addr)
-
-
-async def create_agents(number_of_agents, ttl, time_to_sleep):
-    """
-    Function to create simple agents, all living in one container and a neighborhood.
-    """
-    # container addr
-    addr = ('127.0.0.1', 5555)
-
-    # multiple container are possible, here just one is taken
-    container = await Container.factory(addr=addr)
-
-    agents = []
-
-    # create agents
-    for idx in range(number_of_agents):
-        agents.append(WinzentClassicAgent(container=container, ttl=ttl, time_to_sleep=time_to_sleep))
-
-    # create ring
-    for agent_idx in range(len(agents)):
-        if agent_idx % 2 != 0:
-            continue
-
-        if agent_idx == 0:
-            agents[agent_idx].add_neighbor(aid=agents[agent_idx + 1].aid, addr=addr)
-            agents[agent_idx + 1].add_neighbor(aid=agents[agent_idx].aid, addr=addr)
-
-            agents[agent_idx].add_neighbor(aid=agents[-1].aid, addr=addr)
-            agents[-1].add_neighbor(aid=agents[-1].aid, addr=addr)
-        elif agent_idx == -1:
-            agents[-1].add_neighbor(aid=agents[-2].aid, addr=addr)
-            agents[-2].add_neighbor(aid=agents[-1].aid, addr=addr)
-        else:
-            agents[agent_idx].add_neighbor(aid=agents[agent_idx + 1].aid, addr=addr)
-            agents[agent_idx + 1].add_neighbor(aid=agents[agent_idx].aid, addr=addr)
-
-            agents[agent_idx].add_neighbor(aid=agents[agent_idx - 1].aid, addr=addr)
-            agents[agent_idx - 1].add_neighbor(aid=agents[agent_idx].aid, addr=addr)
-
-    return agents, container
