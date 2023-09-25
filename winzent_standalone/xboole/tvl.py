@@ -1,7 +1,7 @@
 import collections
 import copy
 
-from mango_library.negotiation.winzent import xboole
+from winzent_standalone import xboole
 
 
 class Tvl:

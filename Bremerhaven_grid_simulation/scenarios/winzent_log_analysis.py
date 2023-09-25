@@ -13,7 +13,7 @@ The string readouts are set for the log file version that is implemented in the
 Usage:
 python winzent_log_analysis.py <<log file path>> <<Boolean to write results into .csv-files>>
 
-If none of the parameters are specified, the script will analyze all .log-files in the current 
+If none of the parameters are specified, the scenarios will analyze all .log-files in the current 
 working directory and write them into a .csv-file.
 """
 

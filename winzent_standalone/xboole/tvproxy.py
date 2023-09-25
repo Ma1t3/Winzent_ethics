@@ -1,4 +1,4 @@
-from mango_library.negotiation.winzent.xboole import Tv, Tval
+from winzent_standalone.xboole import Tv, Tval
 
 
 class TVProxy:

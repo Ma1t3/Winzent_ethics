@@ -1,8 +1,8 @@
 from collections import namedtuple
 from copy import deepcopy
 
-from mango_library.negotiation.winzent import xboole
-from mango_library.negotiation.winzent.xboole import PowerBalanceSolverStrategy
+from winzent_standalone import xboole
+from winzent_standalone.xboole import PowerBalanceSolverStrategy
 
 GCD = namedtuple("GCD", "gcd_t gcd_p")
 

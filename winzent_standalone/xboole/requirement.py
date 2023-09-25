@@ -1,7 +1,7 @@
 import uuid
 
-from mango_library.negotiation.winzent import xboole
-from mango_library.negotiation.winzent.winzent_message_pb2 import WinzentMessage
+from winzent_standalone import xboole
+from winzent_standalone.winzent_message_pb2 import WinzentMessage
 
 
 class Requirement:

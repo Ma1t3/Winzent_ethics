@@ -1,7 +1,7 @@
 from mango.core.container import Container
 
-from negotiation.winzent.winzent_base_agent import WinzentBaseAgent
-from negotiation.winzent.winzent_ethical_agent import WinzentEthicalAgent
+from winzent_standalone.winzent_base_agent import WinzentBaseAgent
+from winzent_standalone.winzent_ethical_agent import WinzentEthicalAgent
 
 
 async def shutdown(agents, containers):
@@ -14,33 +14,6 @@ async def shutdown(agents, containers):
 
     for container in containers:
         await container.shutdown()
-
-
-async def create_three_agents():
-    """
-    Creates 3 simple agents, all living in one container and a neighborhood.
-    """
-    # container addr
-    addr = ('127.0.0.1', 5555)
-
-    # multiple container are possible, here just one is taken
-    container = await Container.factory(addr=addr)
-
-    # create agents
-    agent_a = WinzentClassicAgent(container=container, ttl=2)
-    agent_b = WinzentClassicAgent(container=container, ttl=2)
-    agent_c = WinzentClassicAgent(container=container, ttl=2)
-
-    # create random neighbors for agents
-    agent_a.add_neighbor(aid=agent_b.aid,
-                         addr=addr)
-    agent_a.add_neighbor(aid=agent_c.aid,
-                         addr=addr)
-
-    agent_b.add_neighbor(aid=agent_a.aid, addr=addr)
-    agent_c.add_neighbor(aid=agent_a.aid, addr=addr)
-
-    return agent_a, agent_b, agent_c, container
 
 
 async def create_six_base_agents(agent_tts=5):

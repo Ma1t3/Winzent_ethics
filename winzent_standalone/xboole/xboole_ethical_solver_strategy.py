@@ -2,8 +2,8 @@ import math
 from copy import deepcopy
 from itertools import combinations
 
-from mango_library.negotiation.winzent import xboole
-from mango_library.negotiation.winzent.xboole import PowerBalanceSolverStrategy
+from winzent_standalone import xboole
+from winzent_standalone.xboole import PowerBalanceSolverStrategy
 
 
 def get_ethics_score_from_req(requirement):

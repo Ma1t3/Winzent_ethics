@@ -6,8 +6,9 @@ from abc import ABC
 from datetime import datetime
 
 from mango.core.agent import Agent
-from mango_library.negotiation.winzent import xboole
-from mango_library.negotiation.winzent.winzent_message_pb2 import WinzentMessage
+
+from winzent_standalone import xboole
+from winzent_standalone.winzent_message_pb2 import WinzentMessage
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,10 @@ class WinzentBaseAgent(Agent, ABC):
                 before being discarded.
     :param time_to_sleep The time agent gets to finish its negotiation
     :param send_message_paths Controls the activation of message path tracking
-    :param ethics_score The ethics score of the agent used for comparison tests with the WinzentEthicalAgent
+    :param ethics_score The ethics score of the agent, used in the child class WinzentEthicalAgent
     :param elem_type The type of grid component the agent manages
     :param index The index of the agent used for identification inside the agent network
     """
-
     def __init__(self, container, ttl, time_to_sleep=3, send_message_paths=False, ethics_score=1.0,
                  elem_type=None, index=-1):
         super().__init__(container)
@@ -338,14 +338,23 @@ class WinzentBaseAgent(Agent, ABC):
             except asyncio.CancelledError:
                 pass
 
-    async def answer_external_request(self, message, message_path, value, msg_type):
+    async def answer_external_request(self, message, message_path, values, msg_type):
+        """
+
+        :param message: The message that is answered.
+        :param message_path: The message path of the message to send the answer back
+               on that exact same path.
+        :param values: The power values that this message is answered with.
+        :param msg_type: The type of the answer sent.
+        :return:
+        """
         reply = WinzentMessage(
             msg_type=msg_type,
             sender=self._aid,
             is_answer=True,
             receiver=message.sender,
             time_span=message.time_span,
-            value=value,
+            value=values,
             ttl=self._current_ttl,
             id=str(uuid.uuid4()),
             ethics_score=self.ethics_score
@@ -372,7 +381,10 @@ class WinzentBaseAgent(Agent, ABC):
 
     async def handle_external_request(self, requirement, message_path=None):
         """
-        The agent received a negotiation request from another agent.
+        The method to handle incoming requests and see if they can be answered.
+        :param requirement: The requirement that arrived.
+        :param message_path: The message path of the message to send the answer back
+               on that exact same path.
         """
         if message_path is None:
             message_path = []
@@ -409,9 +421,22 @@ class WinzentBaseAgent(Agent, ABC):
             await self.send_message(message, msg_path=message_path, forwarding=True)
 
     def get_ethics_score(self, message):
+        """
+        Returns the ethics score of a message.
+        :param message: The message containing the ethics score.
+        :return: message.ethics_score: The ethics score of the message.
+        """
         return message.ethics_score
 
     async def check_flex(self, reply, flex_to_pick, it):
+        """
+        Checks if the promised flexibility is still valid and corrects the flexibility if necessary.
+        :param reply: The reply of the agent that wants to claim the promised flexibility.
+        :param flex_to_pick: This value is either 0 if the lower flex is needed or 1 if the higher flex is needed.
+        :param it: The index of the time span that is checked.
+        :return: Boolean that is True when the promised flexibility is still valid.
+                 It is False when the flexibility is not valid anymore.
+        """
         distributed_value = 0
         for ack in self._list_of_acknowledgements_sent:
             if reply.time_span[it] in ack.time_span:
@@ -441,6 +466,7 @@ class WinzentBaseAgent(Agent, ABC):
         """
         Checks whether the requested flexibility value in reply is valid (less than or equal to the stored
         flexibility value for the given interval).
+        :param reply: The reply that the validity of the flexibility is checked for.
         """
         valid_array = []
         for it in range(len(reply.time_span)):
@@ -456,7 +482,13 @@ class WinzentBaseAgent(Agent, ABC):
                     self.flex[reply.time_span[it]][flex_to_pick] - reply.value[it]
         return True if all(valid_array) else False
 
-    async def handle_demand_or_offer_reply(self, requirement, message_path):
+    async def handle_initial_reply(self, requirement, message_path):
+        """
+        Adds the reply to the power balance and attempts a solution creation.
+        :param requirement: The requirement that is added to the power balance.
+        :param message_path: The path of the message containing the requirement.
+        :return:
+        """
         # The agent received an offer or demand notification as reply.
         # If the power_balance is empty, the reply is not considered
         # because the negotiation is already done.
@@ -476,6 +508,12 @@ class WinzentBaseAgent(Agent, ABC):
             await self.solve()
 
     async def handle_acceptance_reply(self, reply):
+        """
+        Checks if an AcceptanceNotification is still valid. If so, then it answers it with
+        an AcceptanceAcknowledgementNotification.
+        :param reply: The reply that the validity is checked for.
+        :return:
+        """
         # First, check whether the AcceptanceNotification is still valid
         if self.acceptance_valid(reply):
             async with self._lock:
@@ -513,6 +551,12 @@ class WinzentBaseAgent(Agent, ABC):
         await self.send_message(withdrawal)
 
     async def handle_acceptance_acknowledgement_reply(self, reply):
+        """
+        Checks if an AcceptanceAcknowledgementNotification is still valid. If so, then saves it as part of
+        the solution. If not, the agent sends a WithdrawalNotification.
+        :param reply: The reply that is validated.
+        :return:
+        """
         # If there is no message in solution journal or
         # the solution journal does not contain this message, it is
         # irrelevant
@@ -548,6 +592,13 @@ class WinzentBaseAgent(Agent, ABC):
             await self.reset()
 
     async def handle_withdrawal_reply(self, reply):
+        """
+        After receiving a WithdrawalNotification, this agent removes the other agent's messages from
+        the self._acknowledgements_sent and adds that flexibility back onto his own available
+        flexibility.
+        :param reply: The reply containing the WithdrawalNotification
+        :return:
+        """
         # if the id is not saved, the agent already handled this
         # WithdrawalNotification
         if reply.answer_to in self._acknowledgements_sent:
@@ -605,6 +656,8 @@ class WinzentBaseAgent(Agent, ABC):
         Handle a reply from other agents. Reply may be from types:
         DemandNotification, OfferNotification, AcceptanceNotification,
         AcceptanceAcknowledgementNotification
+        :param requirement: The requirement being handled.
+        :param message_path: The message path of the message containing the requirement.
         """
         if message_path is None:
             message_path = []
@@ -617,7 +670,7 @@ class WinzentBaseAgent(Agent, ABC):
 
         if reply.msg_type == xboole.MessageType.DemandNotification \
                 or reply.msg_type == xboole.MessageType.OfferNotification:
-            await self.handle_demand_or_offer_reply(requirement, message_path)
+            await self.handle_initial_reply(requirement, message_path)
 
         elif reply.msg_type == xboole.MessageType.AcceptanceNotification:
             await self.handle_acceptance_reply(reply)
@@ -798,7 +851,9 @@ class WinzentBaseAgent(Agent, ABC):
     def find_id_for_sender(self, time_span, receiver):
         """
         Returns the id of the original reply to the negotiation request for
-         the given agent.
+        the given agent.
+        :param time_span: the time span of the original reply.
+        :param receiver: The name of the agent whose reply id is searched for.
         """
         if self.governor.power_balance:
             for entry in self.governor.power_balance[1]:
